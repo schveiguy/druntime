@@ -24,6 +24,10 @@ alias BlkInfo = GC.BlkInfo;
 alias BlkAttr = GC.BlkAttr;
 import core.exception : onOutOfMemoryError, onFinalizeError;
 
+
+// only enable this for testing, eliminates all usefulness for cache
+version = DoubleCheckGCFlagsForCache;
+
 private
 {
     alias bool function(Object) CollectHandler;
@@ -445,13 +449,35 @@ BlkInfo *__getBlkInfo(void *interior) nothrow
         for(auto i = curi; i >= ptr; --i)
         {
             if(i.base && i.base <= interior && cast(size_t)(interior - i.base) < i.size)
+            {
+                // DEBUG: ensure the flags are stored properly in the cache
+                version(DoubleCheckGCFlagsForCache)
+                {
+                    BlkInfo gcinfo = GC.query(i.base);
+                    if(gcinfo.attr != i.attr)
+                    {
+                        assert(0);
+                    }
+                }
                 return i;
+            }
         }
 
         for(auto i = ptr + N_CACHE_BLOCKS - 1; i > curi; --i)
         {
             if(i.base && i.base <= interior && cast(size_t)(interior - i.base) < i.size)
+            {
+                // DEBUG: ensure the flags are stored properly in the cache
+                version(DoubleCheckGCFlagsForCache)
+                {
+                    BlkInfo gcinfo = GC.query(i.base);
+                    if(gcinfo.attr != i.attr)
+                    {
+                        assert(0);
+                    }
+                }
                 return i;
+            }
         }
     }
     return null; // not in cache.
