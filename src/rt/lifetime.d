@@ -1849,7 +1849,7 @@ byte[] _d_arrayappendcTX(const TypeInfo ti, ref byte[] px, size_t n)
                     auto info2 = GC.query(px.ptr);
                     if(info1.attr != info2.attr)
                     {
-                        printf("attr1=%x, attr2=%x, info.attr=%x\n", info1.attr, info2.attr, info.attr);
+                        printf("attr1=%x, attr2=%x, info.attr=%x cache=%x\n", info1.attr, info2.attr, info.attr, bic);
                         assert(0);
                     }
                 }
