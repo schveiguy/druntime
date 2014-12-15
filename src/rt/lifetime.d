@@ -1842,6 +1842,17 @@ byte[] _d_arrayappendcTX(const TypeInfo ti, ref byte[] px, size_t n)
                 // do postblit processing
                 __doPostblit(newdata, length * sizeelem, ti.next);
                 (cast(void **)(&px))[1] = newdata;
+                version(DoubleCheckGCFlagsForCache)
+                {
+                    import core.stdc.stdio;
+                    auto info1 = GC.query(newdata);
+                    auto info2 = GC.query(px.ptr);
+                    if(info1.attr != info2.attr)
+                    {
+                        printf("attr1=%x, attr2=%x, info.attr=%x\n", info1.attr, info2.attr, info.attr);
+                        assert(0);
+                    }
+                }
             }
             else if(!isshared && !bic)
             {
