@@ -1833,11 +1833,11 @@ byte[] _d_arrayappendcTX(const TypeInfo ti, ref byte[] px, size_t n)
                 }
 
                 // couldn't do it, reallocate
-                info = GC.qalloc(newcap + LARGEPAD, info.attr);
+                info = GC.qalloc(newcap + __arrayPad(newcap), info.attr);
                 __setArrayAllocLength(info, newsize, isshared);
                 if(!isshared)
                     __insertBlkInfoCache(info, bic);
-                auto newdata = cast(byte *)info.base + LARGEPREFIX;
+                auto newdata = cast(byte *)__arrayStart(info);
                 memcpy(newdata, px.ptr, length * sizeelem);
                 // do postblit processing
                 __doPostblit(newdata, length * sizeelem, ti.next);
