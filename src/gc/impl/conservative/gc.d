@@ -2137,7 +2137,16 @@ struct Gcx
                                     // take advantage of knowing array layout in rt.lifetime
                                     void* arrtop = tgt.pbot + 16 + *cast(size_t*)tgt.pbot;
                                     assert (arrtop > tgt.pbot && arrtop <= tgt.ptop);
-                                    tgt.pbot += 16;
+                                    // This fixes any alignment issues for the
+                                    // pointer bitmap. NOTE: only works for
+                                    // structs, but there are no other types
+                                    // other than structs which have greater
+                                    // than 16-byte alignment and have
+                                    // pointer bitmaps.
+                                    TypeInfo tinext = *cast(TypeInfo*)(tgt.pbot + size_t.sizeof);
+                                    immutable size_t alignment = tinext is null ?
+                                        1 : tinext.talign;
+                                    tgt.pbot += (alignment - 16) & (alignment - 1);
                                     tgt.ptop = arrtop;
                                 }
                                 else

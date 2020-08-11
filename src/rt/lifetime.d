@@ -270,6 +270,9 @@ private class ArrayAllocLengthLock
   |N*elemsize|padding|elem0|elem1|...|elemN-1|emptyspace|sentinelbyte|
 
   where elem0 starts 16 bytes after the first byte.
+
+  Note that this length does NOT include any extra padding for alignment
+  purposes.
   */
 bool __setArrayAllocLength(ref BlkInfo info, size_t newlength, bool isshared, const TypeInfo tinext, size_t oldlength = ~0) pure nothrow
 {
@@ -382,7 +385,8 @@ bool __setArrayAllocLength(ref BlkInfo info, size_t newlength, bool isshared, co
 }
 
 /**
-  get the allocation size of the array for the given block (without padding or type info)
+  get the allocation size of the array for the given block (without basic padding or type info)
+  This does include any alignment padding
   */
 size_t __arrayAllocLength(ref BlkInfo info, const TypeInfo tinext) pure nothrow
 {
@@ -395,11 +399,15 @@ size_t __arrayAllocLength(ref BlkInfo info, const TypeInfo tinext) pure nothrow
     return *cast(size_t *)(info.base);
 }
 
+/**
+ Get the alignment padding required for the given type when placed into a large
+ array where the block size is stored at the front.
+ */
 pragma(inline, true)
 size_t __alignPad(const TypeInfo tinext) pure nothrow @nogc @safe
 {
-    immutable a = tinext.talign;
-    return a > LARGEPREFIX ? a - LARGEPREFIX : 0;
+    immutable size_t a = tinext.talign;
+    return (a - LARGEPREFIX) & (a - 1);
 }
 
 @safe unittest {
@@ -429,11 +437,12 @@ size_t __alignPad(const TypeInfo tinext) pure nothrow @nogc @safe
 
 
 /**
-  get the start of the array for the given block
+  get the start of the array for the given block. This might include alignment
+  padding.
   */
-void *__arrayStart(return BlkInfo info, const TypeInfo tinext) nothrow pure
+void *__arrayStart(return BlkInfo info) nothrow pure
 {
-    return info.base + ((info.size & BIGLENGTHMASK) ? LARGEPREFIX + __alignPad(tinext) : 0);
+    return info.base + ((info.size & BIGLENGTHMASK) ? LARGEPREFIX : 0);
 }
 
 /**
@@ -728,7 +737,7 @@ extern(C) void _d_arrayshrinkfit(const TypeInfo ti, void[] arr) /+nothrow+/
     auto info = bic ? *bic : GC.query(arr.ptr);
     if (info.base && (info.attr & BlkAttr.APPENDABLE))
     {
-        auto newsize = (arr.ptr - __arrayStart(info, tinext)) + cursize;
+        auto newsize = (arr.ptr - __arrayStart(info)) + cursize;
 
         debug(PRINTF) printf("setting allocated size to %d\n", (arr.ptr - info.base) + cursize);
 
@@ -877,11 +886,11 @@ Lcontinue:
         else
         {
             curallocsize = *(cast(size_t *)(info.base));
-            arraypad = LARGEPAD + __alignPad(tinext);
+            arraypad = LARGEPAD;
         }
 
 
-        offset = (*p).ptr - __arrayStart(info, tinext);
+        offset = (*p).ptr - __arrayStart(info);
         if (offset + (*p).length * size != curallocsize)
         {
             curcapacity = 0;
@@ -929,7 +938,7 @@ Lcontinue:
         goto Loverflow;
     // copy the data over.
     // note that malloc will have initialized the data we did not request to 0.
-    auto tgt = __arrayStart(info, tinext);
+    auto tgt = __arrayStart(info) + (info.size >= PAGESIZE ? __alignPad(tinext) : 0);
     memcpy(tgt, (*p).ptr, datasize);
 
     // handle postblit
@@ -962,7 +971,7 @@ Lcontinue:
     else if (info.size < PAGESIZE)
         arraypad = MEDPAD + structTypeInfoSize(tinext);
     else
-        arraypad = LARGEPAD + __alignPad(tinext);
+        arraypad = LARGEPAD;
 
     curcapacity = info.size - arraypad;
     return curcapacity / size;
@@ -1022,7 +1031,8 @@ Lcontinue:
         goto Loverflow;
     debug(PRINTF) printf(" p = %p\n", info.base);
     // update the length of the array
-    auto arrstart = __arrayStart(info, tinext);
+    auto arrstart = __arrayStart(info) +
+        info.size >= PAGESIZE ? __alignPad(tinext) : 0;
     auto isshared = typeid(ti) is typeid(TypeInfo_Shared);
     __setArrayAllocLength(info, size, isshared, tinext);
     return arrstart[0..length];
